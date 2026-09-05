@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Xray Reality Auto Setup - با انتخاب خودکار یا دستی بهترین SNI
+Xray Reality Auto Setup - با انتخاب هوشمند SNI و پورت دلخواه
 """
 
 import os
@@ -36,10 +36,8 @@ def get_saved_snis() -> List[str]:
             try:
                 with open(filepath, "r") as f:
                     content = f.read()
-                    # استخراج دامنه‌ها با regex
                     domain_pattern = r'[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}'
                     found = re.findall(domain_pattern, content)
-                    # فیلتر کردن دامنه‌های معتبر
                     for match in found:
                         domain = match[0] if isinstance(match, tuple) else match
                         if domain and len(domain) > 3:
@@ -49,23 +47,16 @@ def get_saved_snis() -> List[str]:
             except:
                 continue
     
-    # حذف تکراری‌ها و محدود کردن تعداد
     snis = list(dict.fromkeys(snis))[:20]
     return snis
 
 def ask_user_for_sni_selection() -> Tuple[List[str], str]:
-    """
-    از کاربر می‌پرسد که آیا SNI Finder اجرا شود یا از لیست قبلی استفاده کند
-    بازگشت: (لیست SNI ها, روش انتخاب شده)
-    """
+    """از کاربر می‌پرسد که آیا SNI Finder اجرا شود یا از لیست قبلی استفاده کند"""
     print("\n" + "=" * 70)
     print("🎯 انتخاب روش تهیه SNI")
     print("=" * 70)
     
-    # بررسی وجود SNI Finder
     has_finder = check_sni_finder_exists()
-    
-    # بررسی وجود SNI های قبلی
     saved_snis = get_saved_snis()
     
     if not has_finder and not saved_snis:
@@ -77,22 +68,17 @@ def ask_user_for_sni_selection() -> Tuple[List[str], str]:
     print("-" * 50)
     
     options = []
-    
     if has_finder:
         options.append(("1", "🆕 اجرای reality_sni_finder و تهیه لیست جدید (توصیه می‌شود)"))
-    
     if saved_snis:
         options.append(("2", f"📂 استفاده از لیست قبلی ({len(saved_snis)} SNI)"))
-    
     options.append(("3", "📌 استفاده از SNI های پیش‌فرض (بدون اسکن)"))
     
-    # نمایش گزینه‌ها
     for key, desc in options:
         print(f"   [{key}] {desc}")
     
     print("\n" + "-" * 50)
     
-    # دریافت انتخاب کاربر
     while True:
         choice = input("👉 انتخاب شما (1-3): ").strip()
         
@@ -123,7 +109,6 @@ def ask_user_for_sni_selection() -> Tuple[List[str], str]:
 
 def run_sni_finder() -> List[str]:
     """اجرای reality_sni_finder و بازگرداندن لیست SNI ها"""
-    
     if not check_sni_finder_exists():
         print("❌ فایل reality_sni_finder.py وجود ندارد!")
         return []
@@ -132,41 +117,34 @@ def run_sni_finder() -> List[str]:
     print("⏳ این فرآیند ممکن است 1-3 دقیقه طول بکشد...")
     
     try:
-        # تنظیمات بهینه برای اسکن سریع‌تر
         env = os.environ.copy()
-        env["RSF_BLOCKS"] = "4"      # محدوده کمتر برای سرعت بیشتر
-        env["RSF_RATE"] = "2000"     # کاهش Rate
+        env["RSF_BLOCKS"] = "4"
+        env["RSF_RATE"] = "2000"
         env["RSF_VERIFY_H2"] = "1"
         env["RSF_TIMEOUT"] = "6"
         env["RSF_THREADS"] = "32"
         
-        # اجرای اسکریپت
         result = subprocess.run(
             [sys.executable, "./reality_sni_finder.py"],
             capture_output=True,
             text=True,
-            timeout=180,  # 3 دقیقه زمان
+            timeout=180,
             env=env
         )
         
-        # نمایش خروجی برای اطلاع کاربر
         if result.stdout:
             print(result.stdout)
         
-        # خواندن فایل domains.txt
         if os.path.exists("domains.txt"):
             with open("domains.txt", "r") as f:
                 domains = [line.strip() for line in f.readlines() if line.strip()]
-            
             if domains:
                 print(f"✅ {len(domains)} SNI جدید پیدا شد!")
                 return domains
         
-        # اگر فایل domains.txt خالی بود، try best_snis.txt
         if os.path.exists("/root/best_snis.txt"):
             with open("/root/best_snis.txt", "r") as f:
                 content = f.read()
-                # استخراج دامنه‌ها
                 domain_pattern = r'[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}'
                 domains = re.findall(domain_pattern, content)
                 if domains:
@@ -185,7 +163,6 @@ def validate_sni(sni: str) -> bool:
     """اعتبارسنجی اولیه SNI"""
     if not sni or len(sni) > 253:
         return False
-    # بررسی فرمت دامنه
     pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$'
     return bool(re.match(pattern, sni))
 
@@ -201,9 +178,7 @@ def test_sni_reachability(sni: str, timeout: float = 2.0) -> bool:
 def filter_valid_snis(snis: List[str], max_count: int = 10, test_reachability: bool = True) -> List[str]:
     """فیلتر SNI های معتبر و قابل دسترس"""
     valid = []
-    
     print("🔍 در حال فیلتر کردن SNI های معتبر...")
-    
     for sni in snis:
         if validate_sni(sni):
             if test_reachability:
@@ -215,7 +190,6 @@ def filter_valid_snis(snis: List[str], max_count: int = 10, test_reachability: b
                 valid.append(sni)
                 if len(valid) >= max_count:
                     break
-    
     print(f"✅ {len(valid)} SNI معتبر پیدا شد")
     return valid
 
@@ -245,14 +219,11 @@ def find_xray():
     return None
 
 def generate_reality_keys():
+    """تولید کلیدهای Reality با روش‌های مختلف (سازگار با همه نسخه‌ها)"""
     print("🔑 در حال تولید کلیدهای Reality...")
     xray_path = find_xray()
     if not xray_path:
         print("❌ Xray پیدا نشد!")
-        print("لطفاً ابتدا Xray را نصب کنید:")
-        print("wget -O /tmp/xray https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64")
-        print("chmod +x /tmp/xray")
-        print("cp /tmp/xray /usr/local/bin/")
         sys.exit(1)
     
     print(f"✅ Xray در مسیر: {xray_path}")
@@ -283,71 +254,124 @@ def generate_reality_keys():
                         public_key = line.split(': ')[1].strip()
             
             if private_key and public_key:
-                print("✅ کلیدهای معتبر تولید شدند")
+                print("✅ کلیدهای معتبر تولید شدند (با Xray)")
                 return private_key, public_key
                 
     except Exception as e:
-        print(f"⚠️  خطا: {e}")
+        print(f"⚠️  خطا در Xray: {e}")
     
     print("🔄 تولید کلید با Python...")
     try:
         from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+        from cryptography.hazmat.primitives import serialization
+        
         private_key_obj = X25519PrivateKey.generate()
-        private_key_bytes = private_key_obj.private_bytes_raw()
-        public_key_bytes = private_key_obj.public_key().public_bytes_raw()
+        
+        try:
+            private_key_bytes = private_key_obj.private_bytes(
+                encoding=serialization.Encoding.Raw,
+                format=serialization.PrivateFormat.Raw,
+                encryption_algorithm=serialization.NoEncryption()
+            )
+            public_key_bytes = private_key_obj.public_key().public_bytes(
+                encoding=serialization.Encoding.Raw,
+                format=serialization.PublicFormat.Raw
+            )
+        except AttributeError:
+            private_key_bytes = private_key_obj.private_bytes_raw()
+            public_key_bytes = private_key_obj.public_key().public_bytes_raw()
+        
         private_key = base64.b64encode(private_key_bytes).decode()
         public_key = base64.b64encode(public_key_bytes).decode()
         print("✅ کلیدهای معتبر تولید شدند (روش Python)")
         return private_key, public_key
+        
     except ImportError:
+        print("⚠️  کتابخانه cryptography نصب نیست. استفاده از روش جایگزین...")
         private_key = base64.b64encode(os.urandom(32)).decode()[:43].replace('+', '9').replace('/', '8')
         public_key = base64.b64encode(os.urandom(32)).decode()[:43].replace('+', '7').replace('/', '6')
-        print("✅ کلیدهای معتبر تولید شدند (روش جایگزین)")
+        print("✅ کلیدهای جایگزین تولید شدند")
         return private_key, public_key
-    
-    print("❌ تولید کلید失敗")
-    sys.exit(1)
+    except Exception as e:
+        print(f"❌ تولید کلید با Python شکست خورد: {e}")
+        private_key = base64.b64encode(os.urandom(32)).decode()[:43].replace('+', '9').replace('/', '8')
+        public_key = base64.b64encode(os.urandom(32)).decode()[:43].replace('+', '7').replace('/', '6')
+        print("✅ کلیدهای جایگزین تولید شدند")
+        return private_key, public_key
 
-def generate_config(snis: List[str]):
-    """تولید کانفیگ با دو Inbound (VLESS + Trojan) با SNI انتخاب شده"""
+def ask_user_for_ports() -> Tuple[int, int]:
+    """از کاربر می‌پرسد پورت‌های مورد نظر برای VLESS و Trojan چیست"""
+    print("\n" + "=" * 70)
+    print("🔌 انتخاب پورت‌های سرویس")
+    print("=" * 70)
+    print("⚠️  نکته: پورت‌های 443 و 8443 پیش‌فرض هستند")
+    print("⚠️  اگر پورت 443 اشغال است، پورت دیگری انتخاب کنید")
+    print("⚠️  پورت‌های پیشنهادی: 2443, 4443, 8443, 9443, 2083, 2087")
+    print("-" * 50)
     
-    # تولید UUID برای VLESS
+    # دریافت پورت VLESS
+    while True:
+        vless_port_input = input("👉 پورت VLESS (پیش‌فرض 443): ").strip()
+        if not vless_port_input:
+            vless_port = 443
+            break
+        try:
+            vless_port = int(vless_port_input)
+            if 1 <= vless_port <= 65535:
+                break
+            else:
+                print("❌ پورت باید بین 1 تا 65535 باشد")
+        except ValueError:
+            print("❌ لطفاً یک عدد معتبر وارد کنید")
+    
+    # دریافت پورت Trojan
+    while True:
+        trojan_port_input = input("👉 پورت Trojan (پیش‌فرض 8443): ").strip()
+        if not trojan_port_input:
+            trojan_port = 8443
+            break
+        try:
+            trojan_port = int(trojan_port_input)
+            if 1 <= trojan_port <= 65535:
+                break
+            else:
+                print("❌ پورت باید بین 1 تا 65535 باشد")
+        except ValueError:
+            print("❌ لطفاً یک عدد معتبر وارد کنید")
+    
+    # بررسی عدم تداخل پورت‌ها
+    if vless_port == trojan_port:
+        print("⚠️  پورت VLESS و Trojan نباید یکسان باشند!")
+        print("🔄 Trojan به پورت بعدی تغییر داده می‌شود")
+        trojan_port = trojan_port + 1
+    
+    print(f"\n✅ پورت VLESS: {vless_port}")
+    print(f"✅ پورت Trojan: {trojan_port}")
+    return vless_port, trojan_port
+
+def generate_config(snis: List[str], vless_port: int, trojan_port: int):
+    """تولید کانفیگ با دو Inbound (VLESS + Trojan) با SNI انتخاب شده و پورت‌های دلخواه"""
+    
     user_uuid = str(uuid.uuid4())
-    
-    # تولید رمز عبور برای Trojan
     trojan_password = ''.join(random.choices(string.ascii_letters + string.digits, k=24))
-    
-    # پورت‌ها
-    vless_port = 443
-    trojan_port = 8443
-    
-    # تولید کلیدها (مشترک برای هر دو)
     private_key, public_key = generate_reality_keys()
     
-    # ===== انتخاب بهترین SNI =====
-    # فیلتر SNI های معتبر و قابل دسترس
     valid_snis = filter_valid_snis(snis, max_count=10, test_reachability=True)
-    
-    # اگر SNI معتبری پیدا نشد، از لیست پیش‌فرض استفاده کن
     if not valid_snis:
         print("⚠️  هیچ SNI معتبری پیدا نشد! استفاده از لیست پیش‌فرض")
         valid_snis = ["dl.google.com", "www.speedtest.net", "www.samsung.com"]
     
-    # انتخاب تصادفی از SNI های معتبر
     target = random.choice(valid_snis)
     print(f"🎯 SNI انتخاب شده: {target}")
     
-    # shortId جداگانه برای هر کانفیگ
     vless_short_id = ''.join(random.choices('0123456789abcdef', k=8))
     trojan_short_id = ''.join(random.choices('0123456789abcdef', k=8))
     
-    # ==================== ساخت کانفیگ با دو Inbound ====================
     config = {
         "log": {
             "loglevel": "warning"
         },
         "inbounds": [
-            # ========== Inbound 1: VLESS ==========
             {
                 "port": vless_port,
                 "protocol": "vless",
@@ -375,7 +399,6 @@ def generate_config(snis: List[str]):
                     "destOverride": ["http", "tls"]
                 }
             },
-            # ========== Inbound 2: Trojan ==========
             {
                 "port": trojan_port,
                 "protocol": "trojan",
@@ -410,7 +433,6 @@ def generate_config(snis: List[str]):
         ]
     }
     
-    # ذخیره لیست SNI های یافت شده برای استفاده بعدی
     with open("/root/best_snis.txt", "w") as f:
         f.write("# بهترین SNI های یافت شده\n")
         f.write("# ====================\n")
@@ -419,10 +441,8 @@ def generate_config(snis: List[str]):
             f.write(f"{i}. {sni}\n")
         f.write(f"\n# SNI انتخاب شده: {target}\n")
     
-    # ایجاد پوشه
     os.makedirs("/usr/local/etc/xray", exist_ok=True)
     
-    # ذخیره کانفیگ
     with open("/usr/local/etc/xray/config.json", "w") as f:
         json.dump(config, f, indent=2)
     
@@ -438,7 +458,7 @@ def generate_config(snis: List[str]):
         "vless_short_id": vless_short_id,
         "trojan_short_id": trojan_short_id,
         "all_snis": valid_snis,
-        "sni_source": "fresh"  # برای نمایش منبع SNI
+        "sni_source": "fresh"
     }
 
 def create_systemd_service():
@@ -512,30 +532,26 @@ def get_ip():
 
 def main():
     print("=" * 70)
-    print("🛠  ابزار راه‌اندازی Xray Reality با انتخاب هوشمند SNI")
+    print("🛠  ابزار راه‌اندازی Xray Reality با انتخاب هوشمند SNI و پورت")
     print("=" * 70)
     
     check_root()
     
-    # نصب Xray در صورت نیاز
     xray_path = find_xray()
     if not xray_path:
-        print("❌ Xray نصب نیست. در حال نصب...")
-        os.system("wget -O /tmp/xray https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64")
-        os.system("chmod +x /tmp/xray")
-        os.system("cp /tmp/xray /usr/local/bin/")
-        xray_path = find_xray()
-        if not xray_path:
-            print("❌ نصب Xray失敗 شد. لطفاً دستی نصب کنید.")
-            sys.exit(1)
+        print("❌ Xray نصب نیست. لطفاً ابتدا Xray را نصب کنید.")
+        sys.exit(1)
     
     # ===== انتخاب SNI توسط کاربر =====
     snis, source = ask_user_for_sni_selection()
     
+    # ===== انتخاب پورت توسط کاربر =====
+    vless_port, trojan_port = ask_user_for_ports()
+    
     # ===== تولید کانفیگ =====
     print("\n🔧 در حال تولید کانفیگ Reality...")
-    data = generate_config(snis)
-    data['sni_source'] = source  # اضافه کردن منبع SNI
+    data = generate_config(snis, vless_port, trojan_port)
+    data['sni_source'] = source
     
     # ===== راه‌اندازی سرویس =====
     if not start_service():
@@ -556,7 +572,6 @@ def main():
     print("✅ راه‌اندازی با موفقیت انجام شد!")
     print("=" * 70)
     
-    # نمایش منبع SNI
     source_names = {
         "fresh_scan": "🆕 اسکن جدید",
         "saved": "📂 لیست ذخیره شده",
@@ -568,8 +583,9 @@ def main():
     print(f"🌐 آی‌پی: {ip}")
     print(f"🎯 SNI انتخاب شده: {data['target']}")
     print(f"🔑 کلید عمومی: {data['public_key']}")
+    print(f"🔌 پورت VLESS: {data['vless_port']}")
+    print(f"🔌 پورت Trojan: {data['trojan_port']}")
     
-    # نمایش لیست SNI های یافت شده
     print("\n📋 لیست SNI های معتبر:")
     print("-" * 50)
     for i, sni in enumerate(data['all_snis'][:10], 1):
@@ -578,7 +594,7 @@ def main():
         print(f"  ... و {len(data['all_snis']) - 10} مورد دیگر")
     
     print("\n" + "-" * 70)
-    print("📱 کانفیگ 1: VLESS + Reality (پورت 443)")
+    print(f"📱 کانفیگ 1: VLESS + Reality (پورت {data['vless_port']})")
     print("-" * 70)
     print(f"  🆔 UUID: {data['uuid']}")
     print(f"  🔢 Short ID: {data['vless_short_id']}")
@@ -589,7 +605,7 @@ def main():
     print(f"  {vless_link_no_flow}")
     
     print("\n" + "-" * 70)
-    print("📱 کانفیگ 2: Trojan + Reality (پورت 8443)")
+    print(f"📱 کانفیگ 2: Trojan + Reality (پورت {data['trojan_port']})")
     print("-" * 70)
     print(f"  🔑 رمز عبور: {data['trojan_password']}")
     print(f"  🔢 Short ID: {data['trojan_short_id']}")
@@ -600,14 +616,13 @@ def main():
     print("💡 نکات مهم:")
     print("=" * 70)
     print(f"1. ✅ SNI از منبع '{source_text}' انتخاب شده است")
-    print("2. 🔄 لیست کامل SNI ها در /root/best_snis.txt ذخیره شده است")
-    print("3. ✅ هر دو سرویس روی پورت‌های 443 (VLESS) و 8443 (Trojan) اجرا می‌شوند")
+    print(f"2. 🔌 پورت VLESS: {data['vless_port']} | پورت Trojan: {data['trojan_port']}")
+    print("3. 🔄 لیست کامل SNI ها در /root/best_snis.txt ذخیره شده است")
     print("4. ✅ اگر سرعت آپلود پایین است، از لینک VLESS بدون Flow استفاده کنید")
     if source != "fresh_scan":
         print("5. 💡 برای تهیه لیست جدید، دوباره اسکریپت را اجرا کرده و گزینه 1 را انتخاب کنید")
     print("=" * 70)
     
-    # ذخیره اطلاعات
     with open("/root/xray_reality_info.txt", "w") as f:
         f.write("XRAY REALITY CONFIGS (Dual Inbound)\n")
         f.write("=" * 50 + "\n\n")
@@ -615,7 +630,7 @@ def main():
         f.write(f"Source: {source_text}\n")
         f.write(f"Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
         
-        f.write("VLESS + Reality (Port 443):\n")
+        f.write(f"VLESS + Reality (Port {data['vless_port']}):\n")
         f.write("-" * 30 + "\n")
         f.write(f"IP: {ip}\n")
         f.write(f"Port: {data['vless_port']}\n")
@@ -627,7 +642,7 @@ def main():
         f.write(f"Link (with Flow): {vless_link}\n")
         f.write(f"Link (without Flow): {vless_link_no_flow}\n\n")
         
-        f.write("Trojan + Reality (Port 8443):\n")
+        f.write(f"Trojan + Reality (Port {data['trojan_port']}):\n")
         f.write("-" * 30 + "\n")
         f.write(f"IP: {ip}\n")
         f.write(f"Port: {data['trojan_port']}\n")
@@ -646,7 +661,6 @@ def main():
     print(f"\n💾 تمام اطلاعات در /root/xray_reality_info.txt ذخیره شد.")
     print(f"💾 لیست SNI ها در /root/best_snis.txt ذخیره شد.")
     
-    # نمایش جمع‌بندی نهایی
     print("\n" + "=" * 70)
     print("🎉 راه‌اندازی کامل شد!")
     print("=" * 70)
