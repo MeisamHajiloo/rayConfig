@@ -31,35 +31,94 @@ def get_saved_snis() -> List[str]:
     """خواندن SNI های ذخیره شده از فایل"""
     snis = []
     files_to_check = [
+        "/root/domains.txt",
         "/root/best_snis.txt",
         "domains.txt",
         "/root/xray_reality_info.txt"
     ]
+
+    # الگوی ایمن و anchored برای دامنه
+    domain_re = re.compile(
+        r'^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
+    )
+    # برای خطوطی که متن اضافی دارند (مثل "1. domain.com" یا "# SNI: domain.com")
+    inline_re = re.compile(
+        r'(?<![\w.-])((?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,})(?![\w.-])'
+    )
+
     for filepath in files_to_check:
-        if os.path.exists(filepath):
-            try:
-                with open(filepath, "r") as f:
-                    content = f.read()
-                    domain_pattern = (
-                        r'[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?'
-                        r'(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*'
-                        r'\.[a-zA-Z]{2,}'
-                    )
-                    found = re.findall(domain_pattern, content)
-                    for match in found:
-                        domain = match[0] if isinstance(match, tuple) else match
-                        if domain and len(domain) > 3:
-                            snis.append(domain)
-                    if snis:
-                        break
-            except Exception:
+        if not os.path.exists(filepath):
+            continue
+        try:
+            with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                lines = f.readlines()
+        except Exception:
+            continue
+
+        found_here = []
+        for raw in lines:
+            line = raw.strip()
+            if not line or line.startswith("#"):
                 continue
+
+            # حالت اول: کل خط یک دامنه معتبر است (رایج ترین حالت domains.txt)
+            if domain_re.match(line):
+                found_here.append(line)
+                continue
+
+            # حالت دوم: خط شامل متن اضافی است → استخراج با lookaround
+            for m in inline_re.finditer(line):
+                found_here.append(m.group(1))
+
+        if found_here:
+            snis.extend(found_here)
+            break  # اولین فایلی که SNI داشت کافی است
+
+    # حذف تکراری ها با حفظ ترتیب، حداکثر ۲۰ مورد
     snis = list(dict.fromkeys(snis))[:20]
     return snis
 
 
-def ask_user_for_sni_selection() -> Tuple[List[str], str]:
-    """از کاربر می پرسد که آیا SNI Finder اجرا شود یا از لیست قبلی استفاده کند"""
+def ask_user_to_pick_sni(snis: List[str], source_label: str = "") -> Optional[str]:
+    """به کاربر اجازه می دهد از بین SNI های موجود یکی را انتخاب کند"""
+    if not snis:
+        return None
+
+    print("\n" + "=" * 70)
+    print(f"🎯 انتخاب SNI {source_label}")
+    print("=" * 70)
+    print("لطفاً شماره SNI مورد نظر خود را وارد کنید:")
+    print("-" * 50)
+    for i, sni in enumerate(snis, 1):
+        print(f"   [{i}] {sni}")
+    print("-" * 50)
+    print("   [0] 🔄 انتخاب تصادفی (خودکار)")
+    print("-" * 50)
+
+    while True:
+        choice = input(f"👉 انتخاب شما (0-{len(snis)}): ").strip()
+        if not choice:
+            print("❌ لطفاً یک عدد وارد کنید.")
+            continue
+        try:
+            idx = int(choice)
+        except ValueError:
+            print("❌ عدد نامعتبر.")
+            continue
+
+        if idx == 0:
+            picked = random.choice(snis)
+            print(f"🎲 SNI تصادفی انتخاب شد: {picked}")
+            return picked
+        if 1 <= idx <= len(snis):
+            picked = snis[idx - 1]
+            print(f"✅ SNI انتخاب شد: {picked}")
+            return picked
+        print(f"❌ لطفاً عددی بین 0 تا {len(snis)} وارد کنید.")
+
+
+def ask_user_for_sni_selection() -> Tuple[List[str], str, Optional[str]]:
+    """برمی گرداند: (لیست SNI ها، منبع، SNI انتخاب شده یا None)"""
     print("\n" + "=" * 70)
     print("🎯 انتخاب روش تهیه SNI")
     print("=" * 70)
@@ -70,56 +129,57 @@ def ask_user_for_sni_selection() -> Tuple[List[str], str]:
     if not has_finder and not saved_snis:
         print("⚠️  فایل reality_sni_finder.py یافت نشد و هیچ SNI قبلی وجود ندارد.")
         print("📌 استفاده از SNI های پیش فرض...")
-        return (
-            ["dl.google.com", "www.speedtest.net", "www.samsung.com"],
-            "fallback"
-        )
+        defaults = ["dl.google.com", "www.speedtest.net", "www.samsung.com"]
+        picked = ask_user_to_pick_sni(defaults, "(پیش فرض)")
+        return defaults, "fallback", picked
 
     print("\nگزینه های موجود:")
     print("-" * 50)
-
     options = []
     if has_finder:
         options.append(("1", "🆕 اجرای reality_sni_finder و تهیه لیست جدید (توصیه می شود)"))
     if saved_snis:
-        options.append(("2", f"📂 استفاده از لیست قبلی ({len(saved_snis)} SNI)"))
+        options.append(("2", f"📂 استفاده از لیست قبلی ({len(saved_snis)} SNI) و انتخاب دستی"))
     options.append(("3", "📌 استفاده از SNI های پیش فرض (بدون اسکن)"))
 
     for key, desc in options:
         print(f"   [{key}] {desc}")
-
     print("\n" + "-" * 50)
 
     while True:
-        choice = input("👉 انتخاب شما (1-3): ").strip()
+        choice = input(f"👉 انتخاب شما (1-{len(options)}): ").strip()
 
+        # گزینه 1: اسکن جدید
         if choice == "1" and has_finder:
             print("\n🔍 در حال اجرای reality_sni_finder برای تهیه لیست جدید...")
             snis = run_sni_finder()
             if snis:
-                return snis, "fresh_scan"
-            else:
-                print("⚠️  اجرای SNI Finder با مشکل مواجه شد. استفاده از گزینه بعدی...")
-                if saved_snis:
-                    print("📂 استفاده از لیست قبلی...")
-                    return saved_snis, "saved"
-                else:
-                    return (
-                        ["dl.google.com", "www.speedtest.net", "www.samsung.com"],
-                        "fallback"
-                    )
+                picked = ask_user_to_pick_sni(snis, "(اسکن جدید)")
+                return snis, "fresh_scan", picked
+            print("⚠️  اجرای SNI Finder با مشکل مواجه شد.")
+            if saved_snis:
+                print("📂 استفاده از لیست قبلی...")
+                picked = ask_user_to_pick_sni(saved_snis, "(لیست قبلی)")
+                return saved_snis, "saved", picked
+            defaults = ["dl.google.com", "www.speedtest.net", "www.samsung.com"]
+            picked = ask_user_to_pick_sni(defaults, "(پیش فرض)")
+            return defaults, "fallback", picked
 
+        # گزینه 2: لیست قبلی + انتخاب دستی کاربر (بدون اسکن مجدد)
         elif choice == "2" and saved_snis:
-            print(f"📂 استفاده از {len(saved_snis)} SNI ذخیره شده...")
-            return saved_snis, "saved"
+            print(f"\n📂 {len(saved_snis)} SNI از لیست قبلی بارگذاری شد.")
+            picked = ask_user_to_pick_sni(saved_snis, "(لیست قبلی)")
+            return saved_snis, "saved", picked
 
+        # گزینه 3: پیش فرض
         elif choice == "3":
+            defaults = [
+                "dl.google.com", "www.speedtest.net", "www.samsung.com",
+                "www.google-analytics.com", "www.asus.com"
+            ]
             print("📌 استفاده از SNI های پیش فرض...")
-            return (
-                ["dl.google.com", "www.speedtest.net", "www.samsung.com",
-                 "www.google-analytics.com", "www.asus.com"],
-                "fallback"
-            )
+            picked = ask_user_to_pick_sni(defaults, "(پیش فرض)")
+            return defaults, "fallback", picked
 
         else:
             print("❌ انتخاب نامعتبر. لطفاً دوباره تلاش کنید.")
@@ -158,6 +218,13 @@ def run_sni_finder() -> List[str]:
                 domains = [line.strip() for line in f.readlines() if line.strip()]
             if domains:
                 print(f"✅ {len(domains)} SNI جدید پیدا شد!")
+                return domains
+
+        if os.path.exists("/root/domains.txt"):
+            with open("/root/domains.txt", "r") as f:
+                domains = [line.strip() for line in f.readlines() if line.strip()]
+            if domains:
+                print(f"✅ {len(domains)} SNI از /root/domains.txt پیدا شد!")
                 return domains
 
         if os.path.exists("/root/best_snis.txt"):
@@ -227,14 +294,12 @@ def filter_valid_snis(snis: List[str], max_count: int = 10,
 
 def is_port_in_use(port: int) -> bool:
     """بررسی می کند که آیا پورت مورد نظر اشغال است یا خیر"""
-    # روش اول: تلاش برای bind کردن
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             s.bind(("0.0.0.0", port))
         except OSError:
             return True
-    # روش دوم: بررسی با ss (برای پورت های TIME_WAIT یا فرآیندهای دیگر)
     try:
         result = subprocess.run(
             ["ss", "-tulnp"],
@@ -292,12 +357,7 @@ def find_free_port_near(port: int, max_tries: int = 20) -> Optional[int]:
 
 def ask_user_for_single_port(service_name: str, default_port: int,
                              used_ports: List[int]) -> int:
-    """
-    از کاربر یک پورت می گیرد و بررسی می کند:
-      - عدد معتبر باشد
-      - در لیست پورت های قبلاً انتخاب شده نباشد
-      - اشغال نباشد
-    """
+    """از کاربر یک پورت می گیرد و بررسی می کند"""
     while True:
         port_input = input(
             f"👉 پورت {service_name} (پیش فرض {default_port}): "
@@ -316,13 +376,11 @@ def ask_user_for_single_port(service_name: str, default_port: int,
             print("❌ پورت باید بین 1 تا 65535 باشد.")
             continue
 
-        # بررسی تداخل با پورت های قبلاً انتخاب شده
         if port in used_ports:
             print(f"❌ پورت {port} قبلاً برای سرویس دیگری انتخاب شده است.")
             print("🔄 لطفاً پورت دیگری وارد کنید.")
             continue
 
-        # بررسی اشغال بودن پورت
         if is_port_in_use(port):
             owner = get_port_owner(port)
             print(f"❌ پورت {port} در حال حاضر اشغال است.")
@@ -333,7 +391,6 @@ def ask_user_for_single_port(service_name: str, default_port: int,
                 print(f"💡 پیشنهاد: پورت {suggestion} آزاد است.")
             continue
 
-        # هشدار برای پورت های رزرو شده
         if port < 1024:
             print(f"⚠️  پورت {port} در محدودهٔ پورت های رزرو شده است.")
             print("   ممکن است با سرویس های سیستمی تداخل داشته باشد.")
@@ -491,20 +548,30 @@ def build_fragment_settings():
     }
 
 
-def generate_config(snis: List[str], vless_port: int, trojan_port: int):
-    """تولید کانفیگ با دو Inbound (VLESS + Trojan) با SNI انتخاب شده و پورت های دلخواه"""
+def generate_config(snis: List[str], vless_port: int, trojan_port: int,
+                   selected_sni: Optional[str] = None,
+                   skip_reachability_test: bool = False):
+    """تولید کانفیگ با دو Inbound (VLESS + Trojan)"""
 
     user_uuid = str(uuid.uuid4())
     trojan_password = ''.join(random.choices(string.ascii_letters + string.digits, k=24))
     private_key, public_key = generate_reality_keys()
 
-    valid_snis = filter_valid_snis(snis, max_count=10, test_reachability=True)
-    if not valid_snis:
-        print("⚠️  هیچ SNI معتبری پیدا نشد! استفاده از لیست پیش فرض")
-        valid_snis = ["dl.google.com", "www.speedtest.net", "www.samsung.com"]
-
-    target = random.choice(valid_snis)
-    print(f"🎯 SNI انتخاب شده: {target}")
+    # ===== انتخاب SNI =====
+    if selected_sni and selected_sni in snis:
+        target = selected_sni
+        valid_snis = snis  # بدون فیلتر مجدد، کاربر خودش انتخاب کرده
+        print(f"🎯 SNI انتخاب شده کاربر: {target}")
+    else:
+        if skip_reachability_test:
+            valid_snis = filter_valid_snis(snis, max_count=10, test_reachability=False)
+        else:
+            valid_snis = filter_valid_snis(snis, max_count=10, test_reachability=True)
+        if not valid_snis:
+            print("⚠️  هیچ SNI معتبری پیدا نشد! استفاده از لیست پیش فرض")
+            valid_snis = ["dl.google.com", "www.speedtest.net", "www.samsung.com"]
+        target = random.choice(valid_snis)
+        print(f"🎯 SNI انتخاب شده: {target}")
 
     vless_short_id = ''.join(random.choices('0123456789abcdef', k=8))
     trojan_short_id = ''.join(random.choices('0123456789abcdef', k=8))
@@ -695,14 +762,18 @@ def main():
         sys.exit(1)
 
     # ===== انتخاب SNI توسط کاربر =====
-    snis, source = ask_user_for_sni_selection()
+    snis, source, picked_sni = ask_user_for_sni_selection()
 
     # ===== انتخاب پورت توسط کاربر (با بررسی اشغال بودن) =====
     vless_port, trojan_port = ask_user_for_ports()
 
     # ===== تولید کانفیگ =====
     print("\n🔧 در حال تولید کانفیگ Reality با Fragment...")
-    data = generate_config(snis, vless_port, trojan_port)
+    data = generate_config(
+        snis, vless_port, trojan_port,
+        selected_sni=picked_sni,
+        skip_reachability_test=(source == "saved")   # ← در حالت لیست قبلی، تست شبکه رد شود
+    )
     data['sni_source'] = source
 
     # ===== راه اندازی سرویس =====
@@ -799,6 +870,7 @@ def main():
         print("7. 💡 برای تهیه لیست جدید، دوباره اسکریپت را اجرا کرده و گزینه 1 را انتخاب کنید")
     print("=" * 70)
 
+    # ==================== ذخیره اطلاعات در فایل ====================
     with open("/root/xray_reality_info.txt", "w") as f:
         f.write("XRAY REALITY CONFIGS (Dual Inbound + Fragment)\n")
         f.write("=" * 50 + "\n\n")
@@ -839,7 +911,7 @@ def main():
     print(f"💾 لیست SNI ها در /root/best_snis.txt ذخیره شد.")
 
     print("\n" + "=" * 70)
-    print("🎉 راه‌اندازی کامل شد!")
+    print("🎉 راه اندازی کامل شد!")
     print("=" * 70)
 
 
